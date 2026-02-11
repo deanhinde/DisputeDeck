@@ -14,6 +14,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV PLAYWRIGHT_BROWSERS_PATH=0
 
 # Install deps needed by Chromium + minimal fonts
 RUN apt-get update && apt-get install -y \
@@ -49,6 +50,8 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+
+RUN npx playwright install chromium
 
 EXPOSE 3000
 
