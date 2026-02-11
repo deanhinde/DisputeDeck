@@ -1,0 +1,138 @@
+"use client";
+import { useState } from "react";
+
+export default function Home() {
+  const [orderUrl, setOrderUrl] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
+  const [termsUrl, setTermsUrl] = useState("");
+  const [messages, setMessages] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [disputeReason, setDisputeReason] = useState("fraud");
+
+ async function generate() {
+  setBusy(true);
+  setError(null);
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderUrl,
+        trackingUrl,
+        termsUrl,
+        messages,
+        disputeReason
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Failed to generate PDF");
+    }
+
+    const blob = await res.blob();
+
+    // Force a download instead of opening in a new tab
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `disputedeck-${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e: any) {
+    setError(e?.message ?? "Something went wrong");
+  } finally {
+    setBusy(false);
+  }
+}
+
+
+  return (
+    <main className="max-w-2xl mx-auto p-6 space-y-5">
+      <header className="space-y-1">
+        <h1 className="text-3xl font-bold">DisputeDeck</h1>
+        <p className="text-gray-600">
+          Paste your proof. Download one chargeback-ready PDF.
+        </p>
+      </header>
+
+      <div className="space-y-4">
+        <label className="block">
+          <div className="font-semibold">Order confirmation URL</div>
+          <input
+            className="w-full border p-2 rounded"
+            value={orderUrl}
+            onChange={(e) => setOrderUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </label>
+
+        <label className="block">
+          <div className="font-semibold">Tracking URL (optional)</div>
+          <input
+            className="w-full border p-2 rounded"
+            value={trackingUrl}
+            onChange={(e) => setTrackingUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </label>
+
+        <label className="block">
+          <div className="font-semibold">Refund / Terms URL</div>
+          <input
+            className="w-full border p-2 rounded"
+            value={termsUrl}
+            onChange={(e) => setTermsUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </label>
+
+        <label className="block">
+          <div className="font-semibold">Customer messages (paste)</div>
+          <textarea
+            className="w-full border p-2 rounded h-40"
+            value={messages}
+            onChange={(e) => setMessages(e.target.value)}
+            placeholder="Paste the relevant emails/chat…"
+          />
+        </label>
+
+        {error && (
+          <div className="border border-red-300 bg-red-50 text-red-800 p-3 rounded">
+            {error}
+          </div>
+        )}
+        <label className="block">
+        <div className="font-semibold">Dispute Reason</div>
+        <select
+          className="w-full border p-2 rounded"
+          value={disputeReason}
+          onChange={(e) => setDisputeReason(e.target.value)}
+        >
+          <option value="fraud">Fraud / No Authorisation</option>
+          <option value="not_received">Product Not Received</option>
+          <option value="not_as_described">Not as Described</option>
+          <option value="subscription">Subscription / Cancelled</option>
+          <option value="refund">Refund Not Issued</option>
+        </select>
+        </label>
+
+        <button
+          onClick={generate}
+          disabled={busy}
+          className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+        >
+          {busy ? "Generating..." : "Generate Evidence Pack"}
+        </button>
+
+        <p className="text-sm text-gray-500">
+          No account required • Files can be deleted after generation (we’ll add this next)
+        </p>
+      </div>
+    </main>
+  );
+}

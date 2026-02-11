@@ -1,0 +1,73 @@
+import { NextResponse } from "next/server";
+import { chromium } from "playwright";
+
+function escapeHtml(s: string) {
+  return (s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export async function POST(req: Request) {
+  const { orderUrl, trackingUrl, termsUrl, messages } = await req.json();
+
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: A4; margin: 16mm; }
+        body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; }
+        h1 { margin: 0 0 6mm 0; }
+        .muted { color: #555; font-size: 10pt; }
+        .box { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 10px; }
+        .mono { font-family: monospace; word-break: break-all; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+      </style>
+    </head>
+    <body>
+      <h1>DisputeDeck Evidence Pack</h1>
+      <div class="muted">Generated: ${new Date().toISOString()}</div>
+
+      <div class="box">
+        <strong>Order URL</strong>
+        <div class="mono">${escapeHtml(orderUrl)}</div>
+      </div>
+
+      <div class="box">
+        <strong>Tracking URL</strong>
+        <div class="mono">${escapeHtml(trackingUrl)}</div>
+      </div>
+
+      <div class="box">
+        <strong>Terms URL</strong>
+        <div class="mono">${escapeHtml(termsUrl)}</div>
+      </div>
+
+      <div class="box">
+        <strong>Customer Messages</strong>
+        <pre>${escapeHtml(messages)}</pre>
+      </div>
+    </body>
+  </html>`;
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "load" });
+
+  const pdf = await page.pdf({
+    format: "A4",
+    printBackground: true,
+  });
+
+  await browser.close();
+
+  return new NextResponse(Buffer.from(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="disputedeck-evidence-pack.pdf"',
+    },
+  });
+}
