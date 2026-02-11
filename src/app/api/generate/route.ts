@@ -24,36 +24,56 @@ function isProbablyUrl(s: string) {
 }
 
 async function screenshotToDataUri(page: any, url: string) {
-  // Some sites block automation. This won't fix every site, but helps.
-  await page.setExtraHTTPHeaders({
-    "Accept-Language": "en-GB,en;q=0.9",
-  });
-
-  // Try a realistic viewport (reviewers like full-page evidence)
   await page.setViewportSize({ width: 1280, height: 720 });
 
-  // Navigate with sane timeouts
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25_000 });
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  await page.waitForTimeout(1200);
 
-  // Give the page a moment to render above-the-fold content
-  await page.waitForTimeout(800);
+  // Try clicking common consent buttons
+  const consentLabels = ["Accept", "Accept all", "Allow all", "I agree", "Agree", "OK", "Got it"];
+  for (const label of consentLabels) {
+    try {
+      const btn = page.getByRole("button", { name: label });
+      if (await btn.count()) {
+        await btn.first().click({ timeout: 1200 });
+        await page.waitForTimeout(600);
+        break;
+      }
+    } catch {}
+  }
 
-  // Full-page screenshot
-  const buf: Buffer = await page.screenshot({ fullPage: false });
+  // Fallback: hide common cookie overlays
+  try {
+    await page.addStyleTag({
+      content: `
+        #onetrust-banner-sdk, .onetrust-pc-dark-filter, .onetrust-consent-sdk,
+        .cookie-banner, .cookie-consent, .cc-window, .cc-banner,
+        [aria-label*="cookie" i], [id*="cookie" i], [class*="cookie" i]
+        { display:none !important; visibility:hidden !important; opacity:0 !important; }
+      `,
+    });
+  } catch {}
 
-  const type = mime.getType("png") || "image/png";
-  const b64 = buf.toString("base64");
-  return `data:${type};base64,${b64}`;
+  await page.waitForTimeout(300);
+
+  const buf: Buffer = await page.screenshot({ fullPage: true });
+  return `data:image/png;base64,${buf.toString("base64")}`;
 }
-
 export async function POST(req: Request) {
   try {
     const { orderUrl, trackingUrl, termsUrl, messages, disputeReason, uploads } = await req.json();
     const browser = await chromium.launch({
-		args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+  args: ["--no-sandbox", "--disable-setuid-sandbox"],
+});
 
-    const page = await browser.newPage();
+const context = await browser.newContext({
+  locale: "en-GB",
+  userAgent:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+});
+
+ const page = await context.newPage();
+
 
     // OPTIONAL screenshots (only if URL looks valid)
     let orderShot: string | null = null;
@@ -76,16 +96,33 @@ console.log("uploads:", {
     const shotErrors: string[] = [];
 
     async function tryShot(label: string, url: string) {
-      try {
-        return await screenshotToDataUri(page, url);
-      } catch (e: any) {
-        shotErrors.push(`${label}: ${e?.message || "Failed to capture"}`);
-        return null;
-      }
+  try {
+    const dataUri = await screenshotToDataUri(page, url);
+
+    // Validate it’s a real image data URI (prevents src="null" / broken icon)
+    if (!dataUri || !dataUri.startsWith("data:image/") || dataUri.length < 2000) {
+      shotErrors.push(`${label}: Screenshot returned empty/invalid data`);
+      return null;
     }
+
+    return dataUri;
+  } catch (e: any) {
+    shotErrors.push(`${label}: ${e?.message || "Failed to capture"}`);
+    return null;
+  }
+}
+
+console.log("termsShot valid?", !!termsShot, "len:", termsShot?.length);
 
     if (!orderShot && isProbablyUrl(orderUrl)) orderShot = await tryShot("Order URL", orderUrl);
     if (!termsShot && isProbablyUrl(termsUrl)) termsShot = await tryShot("Terms URL", termsUrl);
+console.log("shots:", {
+  order: !!orderShot,
+  terms: !!termsShot,
+  tracking: !!trackingShot,
+  errors: shotErrors,
+});
+
     if (!trackingShot && isProbablyUrl(trackingUrl)) trackingShot = await tryShot("Tracking URL", trackingUrl);
 
 
@@ -151,14 +188,15 @@ Refund eligibility and timelines were clearly displayed and agreed to during che
     margin-top: 6px;
   }
 
-  /* Key trick: constrain the image height so it never splits */
-  .figure img {
-    width: 100%;
-    height: 240mm;          /* fits inside A4 content area with margins + headers */
-    object-fit: contain;    /* scale down, keep full image visible */
-    display: block;
-    background: #fff;
-  }
+ .figure img {
+   width: 100%;
+   height: auto;
+   max-height: 250mm;   /* fits on a page */
+   object-fit: contain;
+   display: block;
+   background: #fff;
+}
+
 
   .caption {
     padding: 8px 10px;
@@ -210,6 +248,9 @@ ${orderShot ? `
   <div class="evidence-page avoid-break">
     <h2>Order Confirmation</h2>
     <div class="muted small">Source: <span class="mono">${escapeHtml(orderUrl || "")}</span></div>
+<div class="muted" style="margin-bottom:6px;">
+  Full-page capture at time of evidence generation.
+</div>
 
     <div class="figure">
       <img src="${orderShot}" alt="Order screenshot" />
@@ -231,6 +272,9 @@ ${termsShot ? `
   <div class="evidence-page avoid-break">
     <h2>Terms / Refund Policy</h2>
     <div class="muted small">Source: <span class="mono">${escapeHtml(termsUrl || "")}</span></div>
+<div class="muted" style="margin-bottom:6px;">
+  Full-page capture at time of evidence generation.
+</div>
 
     <div class="figure">
       <img src="${termsShot}" alt="Terms screenshot" />
@@ -252,6 +296,9 @@ ${trackingShot ? `
   <div class="evidence-page avoid-break">
     <h2>Tracking / Delivery</h2>
     <div class="muted small">Source: <span class="mono">${escapeHtml(trackingUrl || "")}</span></div>
+<div class="muted" style="margin-bottom:6px;">
+  Full-page capture at time of evidence generation.
+</div>
 
     <div class="figure">
       <img src="${trackingShot}" alt="Tracking screenshot" />
@@ -276,22 +323,49 @@ ${trackingShot ? `
 </body>
 </html>`;
 
-    await page.setContent(html, { waitUntil: "load" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-    });
+// Use a fresh page for PDF rendering (more reliable than reusing the capture page)
+const pdfPage = await context.newPage();
 
+await pdfPage.setContent(html, { waitUntil: "load" });
 
-    await browser.close();
+// Debug: confirm termsShot exists (optional)
+console.log("termsShot length:", termsShot?.length);
 
-    return new NextResponse(Buffer.from(pdf), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": 'attachment; filename="disputedeck-evidence-pack.pdf"',
-      },
-    });
+// Wait for images to load/resolve
+await pdfPage.evaluate(async () => {
+  const imgs = Array.from(document.images);
+  await Promise.all(
+    imgs.map((img) =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          })
+    )
+  );
+});
+
+await pdfPage.waitForTimeout(200);
+
+const pdf = await pdfPage.pdf({
+  format: "A4",
+  printBackground: true,
+  preferCSSPageSize: true,
+});
+
+await pdfPage.close();
+await page.close();
+await context.close();
+await browser.close();
+
+return new NextResponse(Buffer.from(pdf), {
+  headers: {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": 'attachment; filename="disputedeck-evidence-pack.pdf"',
+  },
+});
+
   } catch (err: any) {
     return new NextResponse(err?.stack || err?.message || "Unknown error", {
       status: 500,

@@ -82,6 +82,22 @@ function fileToDataUrl(file: File): Promise<string> {
     Generate structured, chargeback-ready evidence in minutes.
   </p>
 </header>
+<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+  <h2 className="font-semibold text-blue-900 mb-2">
+    Structured Evidence For Stripe & PayPal Disputes
+  </h2>
+  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+    <li>Automatically organises evidence by dispute type</li>
+    <li>Combines screenshots + policy + communication into one PDF</li>
+    <li>Formats content clearly for reviewer scanning</li>
+  </ul>
+</div>
+<p className="text-gray-600 text-sm">
+  1. Paste your order details  
+  2. Upload screenshots (or auto-capture)  
+  3. Download a dispute-ready evidence pack
+</p>
+
       <div className="space-y-4">
         <label className="block">
           <div className="font-semibold">Order confirmation URL</div>
@@ -251,10 +267,10 @@ function fileToDataUrl(file: File): Promise<string> {
         >
           {busy ? "Generating..." : "Generate Evidence Pack"}
         </button>
-
-        <p className="text-sm text-gray-500">
-          No account required • Files can be deleted after generation (we’ll add this next)
+        <p className="text-xs text-gray-500 mt-3">
+        Files are processed in-memory and not stored. Built for independent merchants.
         </p>
+
       </div>
     </main>
   );
