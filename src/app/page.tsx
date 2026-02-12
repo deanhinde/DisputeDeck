@@ -76,11 +76,16 @@ function fileToDataUrl(file: File): Promise<string> {
 
   return (
     <main className="min-h-screen bg-gray-50 max-w-2xl mx-auto p-6 space-y-5">
+<div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm px-4 py-2 rounded-md mb-6">
+  🚧 Beta – Free while gathering merchant feedback
+</div>
+
 <header className="space-y-2">
   <h1 className="text-3xl font-bold text-gray-900">DisputeDeck</h1>
-  <p className="text-gray-600">
-    Generate structured, chargeback-ready evidence in minutes.
-  </p>
+ <p className="text-gray-600 text-sm mt-2">
+  Generate structured, reviewer-ready dispute evidence packs for Stripe and PayPal in minutes.
+</p>
+
 </header>
 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
   <h2 className="font-semibold text-blue-900 mb-2">
